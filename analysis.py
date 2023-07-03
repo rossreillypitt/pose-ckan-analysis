@@ -67,13 +67,33 @@ def ckan_version(all_urls_final):
     x_data = list(sorted(version_dict))
     y_data = [version_dict[item] for item in x_data]
 
+def package_counts(all_urls_final):
+    count_of_instances_with_packages = 0
+    packages_counts = []
+    count_of_datasets_below_1000 = 0
+    count_of_datasets_above_50k = 0
+    for item in all_urls_final:
+        try:
+            if item['package_count']:
+                count_of_instances_with_packages += 1
+                packages_counts.append(int(item['package_count']))
+                if int(item['package_count']) < 1001:
+                    count_of_datasets_below_1000 += 1
+                if int(item['package_count']) > 50000:
+                    count_of_datasets_above_50k += 1
+        except KeyError as e:
+            pass
+    package_median = statistics.median(packages_counts)
+    return count_of_instances_with_packages, package_median, count_of_datasets_below_1000, count_of_datasets_above_50k
+
 def time_calcs(all_urls_final):
     year_list = []
     time_dict = {}
     today = datetime.today()
     url_list = []
+    overall_count = 0
     for y in range(2007, 2024):
-        count = 0
+        annual_count = 0
         age = 0
         timedeltas = []
         age_pct = []
@@ -85,7 +105,8 @@ def time_calcs(all_urls_final):
                             if type(item['most_recent_update_date']) == datetime:
                                 year_list.append((item['oldest_metadata_created_date'], item['most_recent_update_date']))
                                 if int(item['oldest_metadata_created_date'].strftime('%Y')) == y:
-                                    count+=1
+                                    annual_count+=1
+                                    overall_count+=1
                                     oldest = item['oldest_metadata_created_date']
                                     most_recent = item['most_recent_update_date']
                                     timedeltas.append(int((most_recent-oldest).days))
@@ -104,9 +125,9 @@ def time_calcs(all_urls_final):
             age_pct_amt = round(((sum(age_pct))/(len(age_pct))), 2)
         else:
             age_pct_amt = 0
-        time_dict[y] = {"year":y, "count": count, "avg_age":avg_age, "median":median_age, "average_lifespan":age_pct_amt}
+        time_dict[y] = {"year":y, "count": annual_count, "avg_age":avg_age, "median":median_age, "average_lifespan":age_pct_amt}
 
-        return(time_dict)
+        return(time_dict, overall_count)
 
 def graphing(time_dict):
     time_dict = sorted(time_dict.items())

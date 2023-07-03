@@ -118,6 +118,19 @@ def checking_for_response(passed_list):
         item["status_code"] = status
     return passed_list
 
+def status_counts(passed_list):
+    status_counts_dict = {}
+    for item in passed_list:
+        if item['source'] in status_counts_dict.keys():
+            status_counts_dict[item['source']]['tally'] += 1
+        else:
+            status_counts_dict[item]['source'] = {'tally': 1, '200_response_count': 0}
+        if item['source_code'] == '200':
+                status_counts_dict[item['source']]['200_response_count'] += 1
+    for item in status_counts_dict:
+        print(f'Total number of unique {item} portals: {status_counts_dict[item]["tally"]}, Count of 200 status codes: '
+               f'{status_counts_dict[item]["200_response_count"]}')
+
 def ckan_status_show(passed_list):
     full_error_list = []
     headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36'}
@@ -217,7 +230,7 @@ def ckan_all_other_functions(passed_list):
     return passed_list
 
 def duplicate_removal_processing(starting_list, new_list):
-    unique_urls = set()
+    unique_urls = set([item['root_url'] for item in starting_list])
     for item in new_list:
         if item['root_url'] in unique_urls:
             pass
@@ -259,16 +272,18 @@ def write_output_file(all_urls_final):
         for item in all_urls_final:
             writer.writerow(item)
 
-# clean_urls = datashades_clean_up(datashades_raw_list)
-# portals_list = dataportals_clean_up(dataportals_raw_list)
-# shades_processed = url_setup("datashades.info", clean_urls)
-# portals_processed = url_setup("dataportals.org", portals_list)
-# outside_processed = url_setup("WPRDC", outside_list)
-# empty_list = []
-# shades_deduped = duplicate_removal_process(empty_list, shades_processed)
-# shade_and_portals_deduped = duplicate_removal_process(shades_deduped, portals_processed)
-# all_processed = duplicate_removal_process(shades_and_portals_deduped, outside_processed)
-# checking_for_response = checking_for_response(all_processed)
-# status_show = ckan_status_show(checking_for_response)
-# all_urls_final = ckan_all_other_functions(status_show)
-# write_output_file(all_urls_final)
+clean_urls = datashades_clean_up(datashades_raw_list)
+portals_list = dataportals_clean_up(dataportals_raw_list)
+raw_shades_count = len(clean_urls)
+raw_portals_count = len(portals_list)
+shades_processed = url_setup("datashades.info", clean_urls)
+portals_processed = url_setup("dataportals.org", portals_list)
+outside_processed = url_setup("WPRDC", outside_list)
+empty_list = []
+shades_and_portals_deduped = duplicate_removal_processing(shades_processed, portals_processed)
+all_processed = duplicate_removal_processing(shades_and_portals_deduped, outside_processed)
+checking_for_response = checking_for_response(all_processed)
+status_counts(all_processed)
+status_show = ckan_status_show(checking_for_response)
+all_urls_final = ckan_all_other_functions(status_show)
+write_output_file(all_urls_final)
