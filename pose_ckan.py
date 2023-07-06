@@ -6,14 +6,13 @@ import pandas as pd
 import json
 from datetime import datetime, date
 from dateutil import parser
+import urllib3
 import sys
 
 # preprocessing of datashades.info urls
 # datashades_raw_list = sys.argv[1]
-# dataportals_raw_list = sys.argv[2]
 
 datashades_raw_list = "shades.csv"
-dataportals_raw_list = "portals.csv"
 
 outside_list = ['http://data.ctdata.org/',
                 'https://data.ci.newark.nj.us/',
@@ -42,14 +41,13 @@ def datashades_clean_up(datashades_list):
         item = re.sub("%3D", "=", item)
         item = re.sub("%3F", "?", item)
         item = re.sub("%23", "#", item)
-        print(item)
         clean_urls.append(item)
 
     return clean_urls
 
 # preprocessing of dataportals.org urls
-def dataportals_clean_up(dataportals_raw_list):
-    portals_df = pd.read_csv("portals.csv")
+def dataportals_clean_up():
+    portals_df = pd.read_csv("https://raw.githubusercontent.com/okfn/dataportals.org/master/data/portals.csv")
     portals_list = list(portals_df.url)
     return portals_list
 
@@ -77,9 +75,8 @@ def checking_for_response(passed_list):
 
     for item in passed_list:
         count+=1
-        print(count)
         try:
-            print(item["source_url"])
+            print(f'Now checking url #{count}: {item["source_url"]}')
             response = requests.get(item["source_url"], verify=False, headers=headers, timeout=120)
             status = response.status_code
             soup = BeautifulSoup(response.text, features="html.parser")
@@ -93,7 +90,6 @@ def checking_for_response(passed_list):
                         generator = ""
             else:
                 generator = ""
-            print(generator)
         except AttributeError:
             name = "AttributeError"
         except requests.exceptions.SSLError as ssl_error:
@@ -123,13 +119,25 @@ def status_counts(passed_list):
     for item in passed_list:
         if item['source'] in status_counts_dict.keys():
             status_counts_dict[item['source']]['tally'] += 1
-        else:
-            status_counts_dict[item]['source'] = {'tally': 1, '200_response_count': 0}
-        if item['source_code'] == '200':
+            if int(item['status_code']) == 200:
                 status_counts_dict[item['source']]['200_response_count'] += 1
+        else:
+            status_counts_dict[item['source']] = {'tally': 1}
+            if int(item['status_code']) == 200:
+                if '200_response_count' in status_counts_dict[item['source']].keys():
+                    status_counts_dict[item['source']]['200_response_count'] += 1
+                else:
+                    status_counts_dict[item['source']]['200_response_count'] = 1
+            else:
+                status_counts_dict[item['source']]['200_response_count'] = 0
+    output_list = []
     for item in status_counts_dict:
-        print(f'Total number of unique {item} portals: {status_counts_dict[item]["tally"]}, Count of 200 status codes: '
-               f'{status_counts_dict[item]["200_response_count"]}')
+        output_list.append({'source': item, 'tally': status_counts_dict[item]['tally'],
+                            '200_response_count': status_counts_dict[item]['200_response_count']})
+    return output_list
+    # for item in status_counts_dict:
+    #     print(f'Total number of unique {item} portals: {status_counts_dict[item]["tally"]}, Count of 200 status codes: '
+    #            f'{status_counts_dict[item]["200_response_count"]}')
 
 def ckan_status_show(passed_list):
     full_error_list = []
@@ -137,7 +145,7 @@ def ckan_status_show(passed_list):
     x=0
     for item in passed_list:
         x+=1
-        print(x)
+        print(f'Now performing a status_show api call on site #{x}: {item["root_url"]}')
         try:
             response = requests.get(f'{item["source_url"]}/api/3/action/status_show', verify=False, headers=headers, timeout=120)
             content = json.loads(response.content)
@@ -158,7 +166,6 @@ def ckan_status_show(passed_list):
                 item["extensions"] = content["result"]["extensions"]
                 item["source_or_base"] = "base"
             except Exception as e:
-                print(item["source_url"])
                 error_list = [item["source_url"], (e.args)]
                 full_error_list.append(error_list)
                 pass
@@ -199,7 +206,7 @@ def ckan_all_other_functions(passed_list):
 
     for item in passed_list:
         x+=1
-        print(x)
+        print(f'Now performing additional API calls on site #{x}: {item["root_url"]}')
         current_best_metadata_date = datetime.now()
         for call in api_calls:
             try:
@@ -224,7 +231,6 @@ def ckan_all_other_functions(passed_list):
                 try:
                     date_check(item, "api_base_url", current_best_metadata_date)
                 except Exception as e:
-                    print(item["source_url"])
                     error_list = [item["source_url"], (e.args)]
                     full_error_list_dates.append(error_list)
     return passed_list
@@ -239,51 +245,60 @@ def duplicate_removal_processing(starting_list, new_list):
             unique_urls.add(item['root_url'])
     return starting_list
 
-def instance_combination(shades_processed, portals_processed):
-    unique_urls = set()
-    both_processed = []
-    for item in shades_processed:
-        if item["root_url"] in unique_urls:
-            pass
-        else:
-            both_processed.append(item)
-            unique_urls.add(item["root_url"])
+# def instance_combination(shades_processed, portals_processed):
+#     unique_urls = set()
+#     both_processed = []
+#     for item in shades_processed:
+#         if item["root_url"] in unique_urls:
+#             pass
+#         else:
+#             both_processed.append(item)
+#             unique_urls.add(item["root_url"])
+#
+#     print(len(both_processed))
+#     for item in portals_processed:
+#         if item["root_url"] in unique_urls:
+#             print(item["root_url"])
+#             pass
+#         else:
+#             both_processed.append(item)
+#
+#     return both_processed
 
-    print(len(both_processed))
-    for item in portals_processed:
-        if item["root_url"] in unique_urls:
-            print(item["root_url"])
-            pass
-        else:
-            both_processed.append(item)
-
-    return both_processed
-
-def write_output_file(all_urls_final):
+def write_output_file(all_urls_final, filename):
     fieldnames = []
     for item in all_urls_final:
         if len(item.keys()) > len(fieldnames):
             fieldnames = item.keys()
 
-    with open("ckan_requests_responses.csv", "w", encoding='utf-8', newline='') as f:
+    with open(filename, "w", encoding='utf-8', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
 
         writer.writeheader()
         for item in all_urls_final:
             writer.writerow(item)
 
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 clean_urls = datashades_clean_up(datashades_raw_list)
-portals_list = dataportals_clean_up(dataportals_raw_list)
+portals_list = dataportals_clean_up()
 raw_shades_count = len(clean_urls)
 raw_portals_count = len(portals_list)
 shades_processed = url_setup("datashades.info", clean_urls)
 portals_processed = url_setup("dataportals.org", portals_list)
 outside_processed = url_setup("WPRDC", outside_list)
-empty_list = []
 shades_and_portals_deduped = duplicate_removal_processing(shades_processed, portals_processed)
 all_processed = duplicate_removal_processing(shades_and_portals_deduped, outside_processed)
 checking_for_response = checking_for_response(all_processed)
-status_counts(all_processed)
+output_list = status_counts(all_processed)
+for item in output_list:
+    if item['source'] == 'datashades.info':
+        item['starting_count'] = raw_shades_count
+    if item['source'] == 'dataportals.org':
+        item['starting_count'] = raw_portals_count
+filename_2 = "ckan_extra_stats.csv"
+write_output_file(output_list, filename_2)
 status_show = ckan_status_show(checking_for_response)
 all_urls_final = ckan_all_other_functions(status_show)
-write_output_file(all_urls_final)
+filename = "ckan_requests_responses-3.csv"
+write_output_file(all_urls_final, filename)
+
