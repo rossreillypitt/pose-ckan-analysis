@@ -13,6 +13,7 @@ headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/
 api_calls = ['package_list', 'tag_list', 'organization_list']
 commondata_url = "https://raw.githubusercontent.com/commondataio/dataportals-registry/main/data/datasets/catalogs.jsonl"
 
+
 def gather_shades_urls(url: str) -> list[str, ]:
     response = requests.get(url)
     raw_content = json.loads(response.text)
@@ -22,9 +23,10 @@ def gather_shades_urls(url: str) -> list[str, ]:
 
 def gather_portals_urls(url: str) -> list[str, ]:
     response = requests.get(url)
-    portals_data = json.loads(response.content)
-    portals_keys = [portal for portal in portals_data.keys()]
-    return [portals_data[portal]['url'] for portal in portals_keys]
+    raw_portals = json.loads(response.content)
+    portal_names = list(raw_portals.keys())
+    urls = [raw_portals[portal]['url'] for portal in portal_names]
+    return urls
 
 
 def gather_commondata_data(url: str) -> list[dict, ]:
@@ -237,3 +239,5 @@ def extract_fields_for_website():
     notes = ['result']['site_description'] # also may be a stringified dict where you'd hope for 'en'
     url = ['result']['site_url']
     data_contact_email = ['result']['error_emails_to']
+=======
+>>>>>>> c60deeb57375350de92cc23f8130726926473c59
