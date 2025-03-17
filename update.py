@@ -239,5 +239,4 @@ def extract_fields_for_website():
     notes = ['result']['site_description'] # also may be a stringified dict where you'd hope for 'en'
     url = ['result']['site_url']
     data_contact_email = ['result']['error_emails_to']
-=======
->>>>>>> c60deeb57375350de92cc23f8130726926473c59
+
