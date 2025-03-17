@@ -123,7 +123,7 @@ def checking_for_response(passed_list):
     return passed_list
 
 
-def api_check(record, url_category, api_call:str ='status_show'):
+def api_check(record, url_category, api_call: str = 'status_show'):
     response = requests.get(f'{record[url_category]}/api/3/action/{api_call}', verify=False, headers=headers, timeout=120)
     content = json.loads(response.content)
     if api_call in api_calls:
@@ -131,12 +131,28 @@ def api_check(record, url_category, api_call:str ='status_show'):
         record[f"{api_call}_source_base_or_apibase"] = url_category
     else:
         record["api_base_url"] = content["result"]["site_url"]
-        record["site_title"] = content["result"]["site_title"]
+        try:
+            record["site_title"] = dict_check(content, "site_title")
+        except:
+            record["site_title"] = content["result"]["site_title"]
         record["version"] = content["result"]["ckan_version"]
         record["locale"] = content["result"]["locale_default"]
         record["extensions"] = content["result"]["extensions"]
-        record["source_or_base"] = "source"
+        record["source_or_base"] = url_category
+        try:
+            record["site_description"] = dict_check(content, "site_description")
+        except:
+            record["site_description"] = content["result"]["site_description"]
+        record["data_contact_email"] = content["result"]["error_emails_to"]
     return record
+
+
+def dict_check(content, category):
+    preliminary_dict = json.loads(content['result'][category])
+    if 'en' in preliminary_dict:
+        return preliminary_dict['en']
+    else:
+        return preliminary_dict
 
 
 def ckan_status_show(passed_list):
@@ -233,10 +249,10 @@ def steps():
     list_of_open_data_instances = ckan_all_other_functions(list_of_open_data_instances)
     write_output_file(list_of_open_data_instances, "ckan_check_feb_26.csv")
 
-
+'''
 def extract_fields_for_website():
     title = ['result']['site_title'] # this may be a stringified dict where 'en' is the key you want
     notes = ['result']['site_description'] # also may be a stringified dict where you'd hope for 'en'
     url = ['result']['site_url']
     data_contact_email = ['result']['error_emails_to']
-
+'''
