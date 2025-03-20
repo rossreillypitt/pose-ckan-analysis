@@ -12,7 +12,7 @@ dataportals_url = "http://dataportals.org/api/data.json"
 headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/102.0.0.0 Safari/537.36'}
 api_calls = ['package_list', 'tag_list', 'organization_list']
 commondata_url = "https://raw.githubusercontent.com/commondataio/dataportals-registry/main/data/datasets/catalogs.jsonl"
-
+update_api_calls = ['']
 
 def gather_shades_urls(url: str) -> list[str, ]:
     response = requests.get(url)
@@ -123,14 +123,26 @@ def checking_for_response(passed_list):
     return passed_list
 
 
-def api_check(record, url_category, api_call: str = 'status_show'):
+def api_check(record, url_category, api_call: str = 'status_show', update: bool = False):
     response = requests.get(f'{record[url_category]}/api/3/action/{api_call}', verify=False, headers=headers, timeout=120)
     content = json.loads(response.content)
     if api_call in api_calls:
         record[f"{api_call}_count"] = len(content["result"])
         record[f"{api_call}_source_base_or_apibase"] = url_category
+        record[f"{api_call}_final_requests_url"] = response.url
+    elif update:
+        try:
+            record["site_title"] = dict_check(content, "site_title")
+        except:
+            record["site_title"] = content["result"]["site_title"]
+        try:
+            record["site_description"] = dict_check(content, "site_description")
+        except:
+            record["site_description"] = content["result"]["site_description"]
+        record["data_contact_email"] = content["result"]["error_emails_to"]
     else:
         record["api_base_url"] = content["result"]["site_url"]
+        record["final_requests_url"] = response.url
         try:
             record["site_title"] = dict_check(content, "site_title")
         except:
@@ -155,17 +167,17 @@ def dict_check(content, category):
         return preliminary_dict
 
 
-def ckan_status_show(passed_list):
+def ckan_status_show(passed_list, update: bool = False):
     full_error_list = []
     x = 0
     for record in passed_list:
         x += 1
         print(f'Now performing a status_show api call on site #{x}: {record["root_url"]}')
         try:
-            record = api_check(record, 'source_url')
+            record = api_check(record, 'source_url', update=update)
         except Exception as e:
             try:
-                record = api_check(record, 'base_url')
+                record = api_check(record, 'base_url', update=update)
             except Exception as e:
                 error_list = [record["source_url"], (e.args)]
                 full_error_list.append(error_list)
@@ -191,7 +203,7 @@ def date_check(record, url_category, current_best_metadata_date):
     return record
 
 
-def ckan_all_other_functions(passed_list):
+def ckan_all_other_functions(passed_list, update: bool = False):
     full_error_list_packages = []
     full_error_list_dates = []
     x = 0
@@ -212,17 +224,20 @@ def ckan_all_other_functions(passed_list):
                         error_list = [record["source_url"], (e.args)]
                         full_error_list_packages.append(error_list)
                         pass
-        try:
-            date_check(record, "source_url", current_best_metadata_date)
-        except Exception as e:
+        if update:
+            pass
+        else:
             try:
-                date_check(record, "base_url", current_best_metadata_date)
+                date_check(record, "source_url", current_best_metadata_date)
             except Exception as e:
                 try:
-                    date_check(record, "api_base_url", current_best_metadata_date)
+                    date_check(record, "base_url", current_best_metadata_date)
                 except Exception as e:
-                    error_list = [record["source_url"], (e.args)]
-                    full_error_list_dates.append(error_list)
+                    try:
+                        date_check(record, "api_base_url", current_best_metadata_date)
+                    except Exception as e:
+                        error_list = [record["source_url"], (e.args)]
+                        full_error_list_dates.append(error_list)
     return passed_list
 
 
@@ -239,15 +254,35 @@ def write_output_file(list_of_ckan_dicts, filename):
 
 
 def steps():
-    shadeslist = gather_shades_urls(new_url)
+    shadeslist = gather_shades_urls(datashades_url)
     portalslist = gather_portals_urls(dataportals_url)
-    shades = url_setup(shadeslist)
-    portals = url_setup(portalslist)
+    shades = url_setup("shades", shadeslist)
+    portals = url_setup("portals", portalslist)
     list_of_open_data_instances = deduplicate([shades, portals])
     list_of_open_data_instances = checking_for_response(list_of_open_data_instances)
     list_of_open_data_instances = ckan_status_show(list_of_open_data_instances)
     list_of_open_data_instances = ckan_all_other_functions(list_of_open_data_instances)
     write_output_file(list_of_open_data_instances, "ckan_check_feb_26.csv")
+
+
+def commondata_steps():
+    commondata_data = gather_commondata_data(commondata_url)
+    commondata_ckan = commondata_portal_filter(commondata_data)
+    commondata_urls = gather_commondata_urls(commondata_data)
+    commondata_ckan_url_list = [list(item.keys())[0] for item in commondata_urls]
+    common = url_setup("commondata", commondata_ckan_url_list)
+    ckans = checking_for_response(common)
+    ckans = ckan_status_show(ckans)
+    ckans = ckan_all_other_functions(ckans)
+    write_output_file(ckans, "commondata_urls_update_mar_18_overnight.csv")
+
+
+def old_data_update_steps():
+    with open("old_list_with_new_calls.csv", "r", newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f, delimiter = ',')
+        old_data = [row for row in reader]
+    old_update = ckan_all_other_functions(old_data, update=True)
+    write_output_file(old_update, "old_list_with_new_calls_pt_2.csv")
 
 '''
 def extract_fields_for_website():
@@ -256,3 +291,36 @@ def extract_fields_for_website():
     url = ['result']['site_url']
     data_contact_email = ['result']['error_emails_to']
 '''
+
+
+def ckan_all_other_functions_record_level(record, counter, update: bool = False):
+    print(f'Now performing additional API calls on site #{counter}: {record["root_url"]}')
+    current_best_metadata_date = datetime.now()
+    for call in api_calls:
+        try:
+            api_check(record, "source_url", call)
+        except Exception as e:
+            try:
+                api_check(record, "base_url", call)
+            except Exception as e:
+                try:
+                    api_check(record, "api_base_url", call)
+                except Exception as e:
+                    error_list = [record["source_url"], (e.args)]
+                    pass
+    if update:
+        return record
+    else:
+        try:
+            date_check(record, "source_url", current_best_metadata_date)
+        except Exception as e:
+            try:
+                date_check(record, "base_url", current_best_metadata_date)
+            except Exception as e:
+                try:
+                    date_check(record, "api_base_url", current_best_metadata_date)
+                except Exception as e:
+                    error_list = [record["source_url"], (e.args)]
+    return record
+
+
